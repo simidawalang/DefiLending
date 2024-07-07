@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./NftContract.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+//import "./NftContract.sol";
 
 error NON_EXISTENT_TOKEN(uint256 tokenId);
 error UNAUTHORIZED(uint256 tokenId);
@@ -14,7 +15,7 @@ error INSUFFICIENT_REPAYMENT_AMOUNT();
 error COLLATERAL_COLLECTED();
 
 contract DeFiLending {
-    NftContract public nftContract;
+    IERC721 public nftContract;
 
     mapping(address => uint256) public deposits;
     mapping(address => uint256) public loans;
@@ -30,13 +31,22 @@ contract DeFiLending {
     event Loan(address indexed user, uint256 amount);
     event Repay(address indexed user, uint256 amount);
 
+
+    function checkIfNftExists(uint256 _tokenId) internal view returns (bool) {
+        try nftContract.ownerOf(_tokenId) returns (address) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     constructor(address _nftContract, uint256 _interestRate) {
-        nftContract = NftContract(_nftContract);
+        nftContract = IERC721(_nftContract);
         interestRate = _interestRate;
     }
 
     modifier nftExists(uint256 _tokenId) {
-        if (_tokenId > nftContract.tokenIdCounter()) {
+        if (!checkIfNftExists(_tokenId)) {
             revert NON_EXISTENT_TOKEN(_tokenId);
         }
         _;
@@ -105,12 +115,13 @@ contract DeFiLending {
         _;
     }
 
+
     function deposit() external payable nonZeroDeposit {
         deposits[msg.sender] += msg.value;
         totalDeposits += msg.value;
         emit Deposit(msg.sender, msg.value);
 
-        if(!whiteListed[msg.sender]) {
+        if (!whiteListed[msg.sender]) {
             whiteListed[msg.sender] = true;
         }
     }
@@ -125,8 +136,8 @@ contract DeFiLending {
     function borrow(uint256 _amount, uint256 _tokenId)
         external
         nftExists(_tokenId)
-        tokenOwner(_tokenId)
         hasToken
+        tokenOwner(_tokenId)
         hasEnoughLiquidity(_amount)
         collateralNotInPossession
     {
